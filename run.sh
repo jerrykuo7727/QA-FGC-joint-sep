@@ -2,8 +2,11 @@
 
 python3_cmd=python3
 
-stage=0
+stage=1
 use_gpu=cuda:1
+
+pretrained_model=/home/M10815022/Models/bert-wwm-ext
+dataset="DRCD Lee Kaggle ASR"
 
 
 if [ $stage -le 0 ]; then
@@ -19,4 +22,17 @@ if [ $stage -le 0 ]; then
     done
   done
   echo "Done."
+fi
+
+if [ $stage -le 1 ]; then
+  echo "======================"
+  echo "     Prepare data     "
+  echo "======================"
+  rm -rf data
+  for split in train dev test; do
+    for dir in context context_no_unk question question_no_unk answer span; do
+      mkdir -p data/$split/$dir
+    done
+  done
+  $python3_cmd scripts/prepare_bert_data.py $pretrained_model $dataset FGC || exit 1
 fi
