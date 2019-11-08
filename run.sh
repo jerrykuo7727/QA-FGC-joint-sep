@@ -5,7 +5,8 @@ python3_cmd=python3
 stage=1
 use_gpu=cuda:1
 
-pretrained_model=/home/M10815022/Models/bert-wwm-ext
+model=xlnet  # (bert|xlnet)
+model_path=/home/M10815022/Models/xlnet-base-chinese
 dataset="DRCD Lee Kaggle ASR"
 
 
@@ -34,5 +35,5 @@ if [ $stage -le 1 ]; then
       mkdir -p data/$split/$dir
     done
   done
-  $python3_cmd scripts/prepare_bert_data.py $pretrained_model $dataset FGC || exit 1
+  $python3_cmd scripts/prepare_${model}_data.py $model_path $dataset FGC || exit 1
 fi
