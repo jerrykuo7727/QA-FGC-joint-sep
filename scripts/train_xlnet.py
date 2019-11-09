@@ -3,6 +3,7 @@ import numpy as np
 from os.path import join
 
 import torch
+from transformers import BertTokenizer
 from transformers import XLNetTokenizer, XLNetForQuestionAnswering
 
 from utils import AdamW
@@ -11,6 +12,8 @@ from evaluate import f1_score, exact_match_score, metric_max_over_ground_truths
 
 np.random.seed(42)
 torch.manual_seed(42)
+
+norm_tokenizer = BertTokenizer.from_pretrained('/home/M10815022/Models/bert-wwm-ext/')
 
 
 def validate_dataset(model, split, tokenizer, dataset):
@@ -38,10 +41,17 @@ def validate_dataset(model, split, tokenizer, dataset):
         count += len(answers)
         
         for i, answer in enumerate(answers):
-            pred = input_tokens_no_unk[i][start_preds[i]:end_preds[i]]
-            pred = tokenizer.convert_tokens_to_string(pred)
-            em += metric_max_over_ground_truths(exact_match_score, pred, answer)
-            f1 += metric_max_over_ground_truths(f1_score, pred, answer)
+            pred_tokens = input_tokens_no_unk[i][start_preds[i]:end_preds[i]]
+            pred = tokenizer.convert_tokens_to_string(pred_tokens)
+
+            norm_pred_tokens = norm_tokenizer.basic_tokenizer.tokenize(pred)
+            norm_pred = norm_tokenizer.convert_tokens_to_string(norm_pred_tokens)
+            norm_answer_tokens = [norm_tokenizer.basic_tokenizer.tokenize(ans) for ans in answer]
+            norm_answer = [norm_tokenizer.convert_tokens_to_string(ans_tokens) for ans_tokens in norm_answer_tokens]
+
+            em += metric_max_over_ground_truths(exact_match_score, norm_pred, norm_answer)
+            f1 += metric_max_over_ground_truths(f1_score, norm_pred, norm_answer)
+
     del dataloader
     return em, f1, count
 
