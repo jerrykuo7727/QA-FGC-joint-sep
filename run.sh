@@ -2,12 +2,12 @@
 
 python3_cmd=python3
 
-stage=2
+stage=1
 use_gpu=cuda:1
 
-model=xlnet   # (bert|xlnet)
-model_path=/home/M10815022/Models/xlnet-base-chinese
-save_path=./models/xlnet
+model=bert  # (bert|xlnet)
+model_path=/home/M10815022/Models/bert-wwm-ext
+save_path=./models/bert
 dataset="DRCD Lee Kaggle ASR"
 
 
@@ -15,7 +15,7 @@ if [ $stage -le 0 ]; then
   echo "==================================================="
   echo "     Convert traditional Chinese to simplified     "
   echo "==================================================="
-  for dataset in DRCD Lee Kaggle ASR; do
+  for dataset in $dataset FGC; do
     for split in training dev test; do
       
       file=dataset/$dataset/${dataset}_${split}.json
@@ -40,6 +40,8 @@ if [ $stage -le 1 ]; then
   $python3_cmd scripts/prepare_${model}_data.py $model_path $dataset FGC || exit 1
 fi
 
+exit 0
+
 
 if [ $stage -le 2 ]; then
   echo "================================="
@@ -49,7 +51,6 @@ if [ $stage -le 2 ]; then
     echo "'$save_path' already exists! Please remove it and try again."; exit 1
   fi
   mkdir -p $save_path
-  source /home/M10815022/Tools/virtualenv/default/bin/activate
   $python3_cmd scripts/train_${model}.py $use_gpu $model_path $save_path $dataset
 fi
 

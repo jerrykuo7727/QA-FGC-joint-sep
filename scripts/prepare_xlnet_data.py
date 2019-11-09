@@ -8,6 +8,8 @@ if __name__ == '__main__':
     
     if len(sys.argv) < 3:
         print('Usage: python3 prepare_xlnet_data.py <pretrained_model> <dataset_1> <dataset_2> ... <dataset_n>')
+        exit(0)
+
     model_path = sys.argv[1]
     datasets = sys.argv[2:]
     tokenizer = XLNetTokenizer.from_pretrained(model_path)
