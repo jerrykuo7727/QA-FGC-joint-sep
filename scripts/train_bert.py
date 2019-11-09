@@ -12,6 +12,8 @@ from evaluate import f1_score, exact_match_score, metric_max_over_ground_truths
 np.random.seed(42)
 torch.manual_seed(42)
 
+norm_tokenizer = BertTokenizer.from_pretrained('/home/M10815022/Models/bert-wwm-ext/')
+
 
 def validate_dataset(model, split, tokenizer, dataset):
     assert split in ('dev', 'test')
@@ -37,10 +39,17 @@ def validate_dataset(model, split, tokenizer, dataset):
         count += len(answers)
         
         for i, answer in enumerate(answers):
-            pred = input_tokens_no_unk[i][start_preds[i]:end_preds[i]]
-            pred = ''.join(tokenizer.convert_tokens_to_string(pred).split())
-            em += metric_max_over_ground_truths(exact_match_score, pred, answer)
-            f1 += metric_max_over_ground_truths(f1_score, pred, answer)
+            pred_tokens = input_tokens_no_unk[i][start_preds[i]:end_preds[i]]
+            pred = tokenizer.convert_tokens_to_string(pred_tokens)
+
+            norm_pred_tokens = norm_tokenizer.basic_tokenizer.tokenize(pred)
+            norm_pred = norm_tokenizer.convert_tokens_to_string(norm_pred_tokens)
+            norm_answer_tokens = [norm_tokenizer.basic_tokenizer.tokenize(ans) for ans in answer]
+            norm_answer = [norm_tokenizer.convert_tokens_to_string(ans_tokens) for ans_tokens in norm_answer_tokens]
+
+            em += metric_max_over_ground_truths(exact_match_score, norm_pred, norm_answer)
+            f1 += metric_max_over_ground_truths(f1_score, norm_pred, norm_answer)
+
     del dataloader
     return em, f1, count
 
@@ -137,7 +146,7 @@ if __name__ == '__main__':
                 optimizer.step()
                 optimizer.zero_grad()
     
-            if step % 500 == 0:
+            if step % 3000 == 0:
                 print("step %d | Validating..." % step)
                 val_f1 = validate(model, tokenizer, dataset)
                 if val_f1 > best_val:
@@ -147,7 +156,7 @@ if __name__ == '__main__':
                 else:
                      patience += 1
 
-            if patience > 5 or step >= 500: #200000:
+            if patience > 5 or step >= 200000:
                 print('Finish training.')
                 save_path = join(sys.argv[3], 'finetune.ckpt')
                 torch.save(best_state_dict, save_path)
