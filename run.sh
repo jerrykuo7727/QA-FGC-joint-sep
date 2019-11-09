@@ -40,8 +40,6 @@ if [ $stage -le 1 ]; then
   $python3_cmd scripts/prepare_${model}_data.py $model_path $dataset FGC || exit 1
 fi
 
-exit 0
-
 
 if [ $stage -le 2 ]; then
   echo "================================="
@@ -51,6 +49,6 @@ if [ $stage -le 2 ]; then
     echo "'$save_path' already exists! Please remove it and try again."; exit 1
   fi
   mkdir -p $save_path
-  $python3_cmd scripts/train_${model}.py $use_gpu $model_path $save_path $dataset
+  $python3_cmd scripts/train_${model}.py $use_gpu $model_path $save_path Lee #$dataset
 fi
 

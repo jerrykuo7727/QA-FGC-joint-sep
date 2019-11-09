@@ -26,20 +26,19 @@ def validate_dataset(model, split, tokenizer, dataset):
         input_ids = input_ids.cuda(device=device)
         attention_mask = attention_mask.cuda(device=device)
         token_type_ids = token_type_ids.cuda(device=device)
-        start_positions = start_positions.cuda(device=device)
-        end_positions = end_positions.cuda(device=device)
         
         model.eval()
         with torch.no_grad():
             outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
         
-        start_preds = outputs[1][:, 0]
-        end_preds = outputs[3][:, 0] + 1
+        start_scores, end_scores = outputs[0], outputs[1]
+        start_preds = start_scores.argmax(1)
+        end_preds = end_scores.argmax(1) + 1
         count += len(answers)
         
         for i, answer in enumerate(answers):
             pred = input_tokens_no_unk[i][start_preds[i]:end_preds[i]]
-            pred = tokenizer.convert_tokens_to_string(pred)
+            pred = ''.join(tokenizer.convert_tokens_to_string(pred).split())
             em += metric_max_over_ground_truths(exact_match_score, pred, answer)
             f1 += metric_max_over_ground_truths(f1_score, pred, answer)
     del dataloader
@@ -102,13 +101,11 @@ if __name__ == '__main__':
 
     dataset = sys.argv[4:]
     model_path = sys.argv[2]
-    tokenizer = XLNetTokenizer.from_pretrained(model_path)
-    model = XLNetForQuestionAnswering.from_pretrained(model_path)
+    tokenizer = BertTokenizer.from_pretrained(model_path)
+    model = BertForQuestionAnswering.from_pretrained(model_path)
 
     device = torch.device(sys.argv[1])
     model.to(device)
-    model.start_n_top = 1
-    model.end_n_top = 1
 
     optimizer = AdamW(model.parameters(), lr=lr)
     optimizer.zero_grad()
@@ -140,7 +137,7 @@ if __name__ == '__main__':
                 optimizer.step()
                 optimizer.zero_grad()
     
-            if step % 3000 == 0:
+            if step % 500 == 0:
                 print("step %d | Validating..." % step)
                 val_f1 = validate(model, tokenizer, dataset)
                 if val_f1 > best_val:
@@ -150,7 +147,7 @@ if __name__ == '__main__':
                 else:
                      patience += 1
 
-            if patience > 5 or step >= 200000:
+            if patience > 5 or step >= 500: #200000:
                 print('Finish training.')
                 save_path = join(sys.argv[3], 'finetune.ckpt')
                 torch.save(best_state_dict, save_path)
