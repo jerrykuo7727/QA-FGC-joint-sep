@@ -126,7 +126,7 @@ class XLNetDataset(Dataset):
 
 
     
-def get_dataloader(split, tokenizer, batch_size=1, num_workers=0, prefix=None):
+def get_dataloader(model_type, split, tokenizer, batch_size=1, num_workers=0, prefix=None):
     def collate_fn(batch):
         input_ids, attention_mask, token_type_ids, start_positions, \
             end_positions, input_tokens_no_unk, answers = zip(*batch)
@@ -138,8 +138,12 @@ def get_dataloader(split, tokenizer, batch_size=1, num_workers=0, prefix=None):
         return input_ids, attention_mask, token_type_ids, start_positions, \
                 end_positions, input_tokens_no_unk, answers,
     
+    assert model_type in ('bert', 'xlnet')
     shuffle = split == 'train'
-    dataset = XLNetDataset(split, tokenizer, prefix)
+    if model_type == 'bert':
+        dataset = BertDataset(split, tokenizer, prefix)
+    elif model_type == 'xlnet':
+        dataset = XLNetDataset(split, tokenizer, prefix)
     dataloader = DataLoader(dataset, collate_fn=collate_fn, shuffle=shuffle, \
                             batch_size=batch_size, num_workers=num_workers)
     return dataloader

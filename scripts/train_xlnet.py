@@ -15,7 +15,7 @@ torch.manual_seed(42)
 
 def validate_dataset(model, split, tokenizer, dataset):
     assert split in ('dev', 'test')
-    dataloader = get_dataloader(split, tokenizer, \
+    dataloader = get_dataloader('xlnet', split, tokenizer, \
             batch_size=32, num_workers=16, prefix=dataset)
     em, f1, count = 0, 0, 0
     
@@ -116,7 +116,7 @@ if __name__ == '__main__':
     step = 0
     patience, best_val = 0, 0
     best_state_dict = model.state_dict()
-    dataloader = get_dataloader('train', tokenizer, batch_size=batch_size, num_workers=16)
+    dataloader = get_dataloader('xlnet', 'train', tokenizer, batch_size=batch_size, num_workers=16)
 
     print('Start training...')
     while True:
