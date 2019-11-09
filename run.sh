@@ -2,8 +2,8 @@
 
 python3_cmd=python3
 
-stage=1
-use_gpu=cuda:1
+stage=2
+use_gpu=cuda:2
 
 model=bert  # (bert|xlnet)
 model_path=/home/M10815022/Models/bert-wwm-ext
