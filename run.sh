@@ -2,12 +2,12 @@
 
 python3_cmd=python3
 
-stage=1
-use_gpu=cuda:0
+stage=0
+use_gpu=cuda:2
 
 model=bert  # (bert|xlnet)
-model_path=/home/M10815022/Models/bert-wwm-ext
-save_path=./models/bert
+model_path=/home/M10815022/Models/roberta-wwm-ext
+save_path=./models/roberta
 dataset="DRCD Lee Kaggle ASR"
 
 
@@ -39,7 +39,6 @@ if [ $stage -le 1 ]; then
   $python3_cmd scripts/prepare_${model}_data.py $model_path $dataset FGC || exit 1
 fi
 
-exit 0
 
 if [ $stage -le 2 ]; then
   echo "================================="
@@ -51,4 +50,3 @@ if [ $stage -le 2 ]; then
   mkdir -p $save_path
   $python3_cmd scripts/train_${model}.py $use_gpu $model_path $save_path $dataset
 fi
-

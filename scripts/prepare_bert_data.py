@@ -13,6 +13,12 @@ def tokenize_no_unk(tokenizer, text):
             split_tokens.extend(wp_tokens)
     return split_tokens
 
+def find_sublist(a, b):
+    for i in range(len(a)-len(b)+1):
+        if a[i:i+len(b)] == b:
+            return i
+    return -1
+
 
 if __name__ == '__main__':
     
@@ -46,7 +52,7 @@ if __name__ == '__main__':
         for split in ['train', 'dev', 'test']:
             if split not in datas:
                 continue
-            bad_context, bad_question = 0, 0
+            impossible_question = 0
             doc_count = len([paragraph for data in datas[split]['data'] for paragraph in data['paragraphs']])
             parsed_count = 0
 
@@ -55,64 +61,34 @@ if __name__ == '__main__':
 
                     # Document
                     raw_context = paragraph['context']
-                    cursor = 0
-                    context, context_no_unk = [], []
-                    answers = []
+                    context = tokenizer.tokenize(raw_context)
+                    context_no_unk = tokenize_no_unk(tokenizer, raw_context)
 
                     # QA pairs
                     qas = []
-                    for qa in sorted(paragraph['qas'], key=lambda x: x['answers'][0]['answer_start']):
+                    for qa in paragraph['qas']:
                         processed_qa = {}
                         raw_question = qa['question']
                         question = tokenizer.tokenize(raw_question)
                         question_no_unk = tokenize_no_unk(tokenizer, raw_question)
-                        assert len(question) == len(question_no_unk)
-                        assert tokenizer.unk_token not in question_no_unk
 
-                        raw_answer = qa['answers'][0]['text']
                         raw_answers = [ans['text'] for ans in qa['answers']]
-                        raw_answer_start = qa['answers'][0]['answer_start']
-                        assert raw_answer in raw_context
-
-                        pre_raw_context = raw_context[cursor:raw_answer_start]
-                        pre_context = tokenizer.tokenize(pre_raw_context)
-                        pre_context_no_unk = tokenize_no_unk(tokenizer, pre_raw_context)
-
-                        answer = tokenizer.tokenize(raw_answer)
-                        answer_no_unk = tokenize_no_unk(tokenizer, raw_answer)
-                        assert len(answer) == len(answer_no_unk)
-                        assert tokenizer.unk_token not in answer_no_unk
-                        if len(answer_no_unk) == 0:
-                            bad_question += 1
-                            continue
-
-                        context += pre_context
-                        context_no_unk += pre_context_no_unk
-
-                        answer_start = len(context)
-                        answer_end = answer_start + len(answer) - 1
-                        context += answer
-                        context_no_unk += answer_no_unk
-
-                        cursor = raw_answer_start + len(raw_answer)        
-                        answers.append((answer_no_unk, answer_start, answer_end))
-
-                        processed_qa['question'] = question
-                        processed_qa['question_no_unk'] = question_no_unk
-                        processed_qa['answer'] = raw_answers
-                        processed_qa['answer_start'] = answer_start
-                        processed_qa['answer_end'] = answer_end
-                        processed_qa['id'] = qa['id']
-                        qas.append(processed_qa)
-
-                    # Auto-tests
-                    assert len(context) == len(context_no_unk)
-                    assert tokenizer.unk_token not in context_no_unk
-                    for answer_no_unk, answer_start, answer_end in answers:
-                        assert answer_no_unk == context_no_unk[answer_start:answer_end+1]
-                    if len(context_no_unk) == 0:
-                        bad_context += 1
-                        continue
+                        answer_no_unk = tokenize_no_unk(tokenizer, raw_answers[0])
+                        
+                        answer_start = find_sublist(context_no_unk, answer_no_unk)
+                        answer_end = answer_start + len(answer_no_unk) - 1 if answer_start >= 0 else -1
+                        if answer_start < 0:
+                            impossible_question += 1
+                        
+                        if answer_start >= 0 or split != 'train':
+                            processed_qa['question'] = question
+                            processed_qa['question_no_unk'] = question_no_unk
+                            processed_qa['answer'] = raw_answers
+                            processed_qa['answer_start'] = answer_start
+                            processed_qa['answer_end'] = answer_end
+                            processed_qa['id'] = qa['id']
+                            qas.append(processed_qa)
+                            
 
                     # Save processed data
                     with open('data/%s/context/%s|%s' % (split, dataset, paragraph['id']), 'w') as f:
@@ -145,8 +121,5 @@ if __name__ == '__main__':
                     print('%s set: %d/%d (%.2f%%) \r' \
                           % (split, parsed_count, doc_count, 100*parsed_count/doc_count), end='')
             print()
-            if bad_context > 0:
-                print('%d bad contexts found.' % bad_context)
-            if bad_question > 0:
-                print('%d bad questions found.' % bad_question)
+            print('impossible_questions: %d' % impossible_question)
     exit(0)
