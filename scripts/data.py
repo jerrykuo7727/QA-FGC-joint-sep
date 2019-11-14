@@ -76,11 +76,12 @@ class BertDataset(Dataset):
             return input_ids, attention_mask, token_type_ids, input_tokens_no_unk, answer
 
 class XLNetDataset(Dataset):
-    def __init__(self, split, tokenizer, prefix=None):
+    def __init__(self, split, tokenizer, bwd=False, prefix=None):
         assert split in ('train', 'dev', 'test')
         self.split = split
         self.question_list = os.listdir('data/%s/question' % split)
         self.tokenizer = tokenizer
+        self.bwd = bwd
         if prefix:
              self.question_list = [q for q in self.question_list if q.startswith(prefix)]
 
@@ -109,17 +110,27 @@ class XLNetDataset(Dataset):
             span = f.read().split(' ')
             answer_start = int(span[0])
             answer_end = int(span[1])
-
+            
         # Truncate length to 512
         diff = len(question) + len(context) - 511
-        if answer_end > 510:
-            context = context[diff:]
-            context_no_unk = context_no_unk[diff:]
-            answer_start -= diff
-            answer_end -= diff
-        elif diff > 0:
-            context = context[:-diff]
-            context_no_unk = context_no_unk[:-diff]
+        if diff > 0:
+            if self.split == 'train':
+                if answer_end > 510:
+                    context = context[diff:]
+                    context_no_unk = context_no_unk[diff:]
+                    answer_start -= diff
+                    answer_end -= diff
+                else:
+                    context = context[:-diff]
+                    context_no_unk = context_no_unk[:-diff]
+            else:
+                if diff > 0:
+                    if self.bwd:
+                        context = context[diff:]
+                        context_no_unk = context_no_unk[diff:]
+                    else:
+                        context = context[:-diff]
+                        context_no_unk = context_no_unk[:-diff]
 
         context.append(self.tokenizer.sep_token)
         context_no_unk.append(self.tokenizer.sep_token)
@@ -129,11 +140,12 @@ class XLNetDataset(Dataset):
         input_ids = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(input_tokens))
         attention_mask = torch.FloatTensor([1 for _ in input_tokens])
         token_type_ids = torch.LongTensor([0 for _ in context] + [1 for _ in question])
-        start_positions = torch.LongTensor([answer_start]).squeeze(0)
-        end_positions = torch.LongTensor([answer_end]).squeeze(0)
-
-        return input_ids, attention_mask, token_type_ids, start_positions, \
-                end_positions, input_tokens_no_unk, answer
+        if self.split == 'train':
+            start_positions = torch.LongTensor([answer_start]).squeeze(0)
+            end_positions = torch.LongTensor([answer_end]).squeeze(0)
+            return input_ids, attention_mask, token_type_ids, start_positions, end_positions
+        else:
+            return input_ids, attention_mask, token_type_ids, input_tokens_no_unk, answer
 
 
     

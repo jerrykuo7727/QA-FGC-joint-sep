@@ -2,12 +2,12 @@
 
 python3_cmd=python3
 
-stage=0
+stage=2
 use_gpu=cuda:1
 
-model=bert  # (bert|xlnet)
-model_path=/home/M10815022/Models/bert-wwm-ext
-save_path=./models/bert
+model=xlnet  # (bert|xlnet)
+model_path=/home/M10815022/Models/xlnet-base-chinese
+save_path=./models/xlnet
 datasets="DRCD Lee Kaggle ASR"
 
 
