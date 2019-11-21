@@ -18,10 +18,10 @@ class BertDataset(Dataset):
         
     def __getitem__(self, i):
         question_id = self.question_list[i]
-        with open('data/%s/context/%s' % (self.split, '|'.join(question_id.split('|')[:2]))) as f:
-            context = f.read().split(' ')
-        with open('data/%s/context_no_unk/%s' % (self.split, '|'.join(question_id.split('|')[:2]))) as f:
-            context_no_unk = f.read().split(' ')
+        with open('data/%s/passage/%s' % (self.split, '|'.join(question_id.split('|')[:2]))) as f:
+            passage = f.read().split(' ')
+        with open('data/%s/passage_no_unk/%s' % (self.split, '|'.join(question_id.split('|')[:2]))) as f:
+            passage_no_unk = f.read().split(' ')
 
         with open('data/%s/question/%s' % (self.split, question_id)) as f:
             question = f.read().split(' ')
@@ -40,34 +40,34 @@ class BertDataset(Dataset):
             answer_end = int(span[1]) + len(question)
         
         # Truncate length to 512
-        diff = len(question) + len(context) - 511
+        diff = len(question) + len(passage) - 511
         if diff > 0:
             if self.split == 'train':
                 if answer_end > 510:
-                    context = context[diff:]
-                    context_no_unk = context_no_unk[diff:]
+                    passage = passage[diff:]
+                    passage_no_unk = passage_no_unk[diff:]
                     answer_start -= diff
                     answer_end -= diff
                 else:
-                    context = context[:-diff]
-                    context_no_unk = context_no_unk[:-diff]
+                    passage = passage[:-diff]
+                    passage_no_unk = passage_no_unk[:-diff]
             else:
                 if diff > 0:
                     if self.bwd:
-                        context = context[diff:]
-                        context_no_unk = context_no_unk[diff:]
+                        passage = passage[diff:]
+                        passage_no_unk = passage_no_unk[diff:]
                     else:
-                        context = context[:-diff]
-                        context_no_unk = context_no_unk[:-diff]
+                        passage = passage[:-diff]
+                        passage_no_unk = passage_no_unk[:-diff]
 
-        context.append(self.tokenizer.sep_token)
-        context_no_unk.append(self.tokenizer.sep_token)
-        input_tokens = question + context
-        input_tokens_no_unk = question_no_unk + context_no_unk
+        passage.append(self.tokenizer.sep_token)
+        passage_no_unk.append(self.tokenizer.sep_token)
+        input_tokens = question + passage
+        input_tokens_no_unk = question_no_unk + passage_no_unk
         
         input_ids = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(input_tokens))
         attention_mask = torch.FloatTensor([1 for _ in input_tokens])
-        token_type_ids = torch.LongTensor([0 for _ in question] + [1 for _ in context])
+        token_type_ids = torch.LongTensor([0 for _ in question] + [1 for _ in passage])
         if self.split == 'train':
             start_positions = torch.LongTensor([answer_start]).squeeze(0)
             end_positions = torch.LongTensor([answer_end]).squeeze(0)
@@ -90,10 +90,10 @@ class XLNetDataset(Dataset):
 
     def __getitem__(self, i):
         question_id = self.question_list[i]
-        with open('data/%s/context/%s' % (self.split, '|'.join(question_id.split('|')[:2]))) as f:
-            context = f.read().split(' ')
-        with open('data/%s/context_no_unk/%s' % (self.split, '|'.join(question_id.split('|')[:2]))) as f:
-            context_no_unk = f.read().split(' ')
+        with open('data/%s/passage/%s' % (self.split, '|'.join(question_id.split('|')[:2]))) as f:
+            passage = f.read().split(' ')
+        with open('data/%s/passage_no_unk/%s' % (self.split, '|'.join(question_id.split('|')[:2]))) as f:
+            passage_no_unk = f.read().split(' ')
 
         with open('data/%s/question/%s' % (self.split, question_id)) as f:
             question = f.read().split(' ')
@@ -112,34 +112,34 @@ class XLNetDataset(Dataset):
             answer_end = int(span[1])
             
         # Truncate length to 512
-        diff = len(question) + len(context) - 511
+        diff = len(question) + len(passage) - 511
         if diff > 0:
             if self.split == 'train':
                 if answer_end > 510:
-                    context = context[diff:]
-                    context_no_unk = context_no_unk[diff:]
+                    passage = passage[diff:]
+                    passage_no_unk = passage_no_unk[diff:]
                     answer_start -= diff
                     answer_end -= diff
                 else:
-                    context = context[:-diff]
-                    context_no_unk = context_no_unk[:-diff]
+                    passage = passage[:-diff]
+                    passage_no_unk = passage_no_unk[:-diff]
             else:
                 if diff > 0:
                     if self.bwd:
-                        context = context[diff:]
-                        context_no_unk = context_no_unk[diff:]
+                        passage = passage[diff:]
+                        passage_no_unk = passage_no_unk[diff:]
                     else:
-                        context = context[:-diff]
-                        context_no_unk = context_no_unk[:-diff]
+                        passage = passage[:-diff]
+                        passage_no_unk = passage_no_unk[:-diff]
 
-        context.append(self.tokenizer.sep_token)
-        context_no_unk.append(self.tokenizer.sep_token)
-        input_tokens = context + question
-        input_tokens_no_unk = context_no_unk + question_no_unk
+        passage.append(self.tokenizer.sep_token)
+        passage_no_unk.append(self.tokenizer.sep_token)
+        input_tokens = passage + question
+        input_tokens_no_unk = passage_no_unk + question_no_unk
 
         input_ids = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(input_tokens))
         attention_mask = torch.FloatTensor([1 for _ in input_tokens])
-        token_type_ids = torch.LongTensor([0 for _ in context] + [1 for _ in question])
+        token_type_ids = torch.LongTensor([0 for _ in passage] + [1 for _ in question])
         if self.split == 'train':
             start_positions = torch.LongTensor([answer_start]).squeeze(0)
             end_positions = torch.LongTensor([answer_end]).squeeze(0)
