@@ -14,6 +14,8 @@ def tokenize_no_unk(tokenizer, text):
     return split_tokens
 
 def find_sublist(a, b):
+    if not b: 
+        return -1
     for i in range(len(a)-len(b)+1):
         if a[i:i+len(b)] == b:
             return i
@@ -22,104 +24,80 @@ def find_sublist(a, b):
 
 if __name__ == '__main__':
     
-    if len(sys.argv) < 3:
-        print('Usage: python3 prepare_bert_data.py <pretrained_model> <dataset_1> <dataset_2> ... <dataset_n>')
+    if len(sys.argv) < 4:
+        print('Usage: python3 prepare_bert_data.py <pretrained_model> <split> <dataset_1> <dataset_2> ... <dataset_n>')
         exit(1)
 
     model_path = sys.argv[1]
-    datasets = sys.argv[2:]
+    split = sys.argv[2]
+    datasets = sys.argv[3:]
     tokenizer = BertTokenizer.from_pretrained(model_path)
     
     for dataset in datasets:
-        print("Prepare data of %s dataset..." % dataset)
-        
-        # Try to read json files
-        datas = {}
-        if exists(join('dataset', dataset, '%s_training.json' % dataset)):
-            datas['train'] = json.loads(open(join('dataset', dataset, '%s_training.json' % dataset)).read())
-        else:
-            print("'%s' doesn't exist, skipping..." % (join('dataset', dataset, '%s_training.json' % dataset)))
-        if exists(join('dataset', dataset, '%s_dev.json' % dataset)):
-            datas['dev'] = json.loads(open(join('dataset', dataset, '%s_dev.json' % dataset)).read())
-        else:
-            print("'%s' doesn't exist, skipping..." % (join('dataset', dataset, '%s_dev.json' % dataset)))
-        if exists(join('dataset', dataset, '%s_test.json' % dataset)):
-            datas['test'] = json.loads(open(join('dataset', dataset, '%s_test.json' % dataset)).read())
-        else:
-            print("'%s' doesn't exist, skipping..." % (join('dataset', dataset, '%s_test.json' % dataset)))
+        data = json.load(open('dataset/%s.json' % dataset))
+        passage_count = len(data)
+        impossible_questions = 0
+        for i, PQA in enumerate(data, start=1):
 
-        # Prepare data of each split
-        for split in ['train', 'dev', 'test']:
-            if split not in datas:
-                continue
-            impossible_question = 0
-            doc_count = len([paragraph for data in datas[split]['data'] for paragraph in data['paragraphs']])
-            parsed_count = 0
+            # Passage
+            raw_passage = PQA['DTEXT'].strip()
+            passage = tokenizer.tokenize(raw_passage)
+            passage_no_unk = tokenize_no_unk(tokenizer, raw_passage)
+            PID = PQA['DID']
 
-            for data in datas[split]['data']:
-                for paragraph in data['paragraphs']:
+            # QA pairs
+            QAs = []
+            for QA in PQA['QUESTIONS']:
+                processed_QA = {}
+                raw_question = QA['QTEXT'].strip()
+                question = tokenizer.tokenize(raw_question)
+                question_no_unk = tokenize_no_unk(tokenizer, raw_question)
 
-                    # Document
-                    raw_context = paragraph['context']
-                    context = tokenizer.tokenize(raw_context)
-                    context_no_unk = tokenize_no_unk(tokenizer, raw_context)
+                raw_answers = [A['ATEXT'].strip() for A in QA['ANSWER']]
+                answer_no_unk = tokenize_no_unk(tokenizer, raw_answers[0])
 
-                    # QA pairs
-                    qas = []
-                    for qa in paragraph['qas']:
-                        processed_qa = {}
-                        raw_question = qa['question']
-                        question = tokenizer.tokenize(raw_question)
-                        question_no_unk = tokenize_no_unk(tokenizer, raw_question)
+                answer_start = find_sublist(passage_no_unk, answer_no_unk)
+                answer_end = answer_start + len(answer_no_unk) - 1 if answer_start >= 0 else -1
+                if answer_start < 0:
+                    impossible_questions += 1
 
-                        raw_answers = [ans['text'] for ans in qa['answers']]
-                        answer_no_unk = tokenize_no_unk(tokenizer, raw_answers[0])
-                        
-                        answer_start = find_sublist(context_no_unk, answer_no_unk)
-                        answer_end = answer_start + len(answer_no_unk) - 1 if answer_start >= 0 else -1
-                        if answer_start < 0:
-                            impossible_question += 1
-                        
-                        if answer_start >= 0 or split != 'train':
-                            processed_qa['question'] = question
-                            processed_qa['question_no_unk'] = question_no_unk
-                            processed_qa['answer'] = raw_answers
-                            processed_qa['answer_start'] = answer_start
-                            processed_qa['answer_end'] = answer_end
-                            processed_qa['id'] = qa['id']
-                            qas.append(processed_qa)
-                            
+                if answer_start >= 0 or split != 'train':
+                    processed_QA['question'] = question
+                    processed_QA['question_no_unk'] = question_no_unk
+                    processed_QA['answer'] = raw_answers
+                    processed_QA['answer_start'] = answer_start
+                    processed_QA['answer_end'] = answer_end
+                    processed_QA['id'] = QA['QID']
+                    QAs.append(processed_QA)
 
-                    # Save processed data
-                    with open('data/%s/context/%s|%s' % (split, dataset, paragraph['id']), 'w') as f:
-                        assert context == ' '.join(context).split(' ')
-                        f.write(' '.join(context))
+            # Save processed data
+            with open('data/%s/passage/%s|%s' % (split, dataset, PID), 'w') as f:
+                assert passage == ' '.join(passage).split(' ')
+                f.write(' '.join(passage))
 
-                    with open('data/%s/context_no_unk/%s|%s' % (split, dataset, paragraph['id']), 'w') as f:
-                        assert context_no_unk == ' '.join(context_no_unk).split(' ')
-                        f.write(' '.join(context_no_unk))
+            with open('data/%s/passage_no_unk/%s|%s' % (split, dataset, PID), 'w') as f:
+                assert passage_no_unk == ' '.join(passage_no_unk).split(' ')
+                f.write(' '.join(passage_no_unk))
 
-                    for qa in qas:
-                        question = qa['question']
-                        question_no_unk = qa['question_no_unk']
-                        answers = qa['answer']
-                        answer_start = qa['answer_start']
-                        answer_end = qa['answer_end']
-                        with open('data/%s/question/%s|%s|%s' % (split, dataset, paragraph['id'], qa['id']), 'w') as f:
-                            assert question  == ' '.join(question).split(' ')
-                            f.write(' '.join(question))
-                        with open('data/%s/question_no_unk/%s|%s|%s' % (split, dataset, paragraph['id'], qa['id']), 'w') as f:
-                            assert question_no_unk  == ' '.join(question_no_unk).split(' ')
-                            f.write(' '.join(question_no_unk))
-                        with open('data/%s/answer/%s|%s|%s' % (split, dataset, paragraph['id'], qa['id']), 'w') as f:
-                            for answer in answers:
-                                f.write('%s\n' % answer)
-                        with open('data/%s/span/%s|%s|%s' % (split, dataset, paragraph['id'], qa['id']), 'w') as f:
-                            f.write('%d %d' % (answer_start, answer_end))
+            for QA in QAs:
+                question = QA['question']
+                question_no_unk = QA['question_no_unk']
+                answers = QA['answer']
+                answer_start = QA['answer_start']
+                answer_end = QA['answer_end']
+                QID = QA['id']
+                with open('data/%s/question/%s|%s|%s' % (split, dataset, PID, QID), 'w') as f:
+                    assert question  == ' '.join(question).split(' ')
+                    f.write(' '.join(question))
+                with open('data/%s/question_no_unk/%s|%s|%s' % (split, dataset, PID, QID), 'w') as f:
+                    assert question_no_unk  == ' '.join(question_no_unk).split(' ')
+                    f.write(' '.join(question_no_unk))
+                with open('data/%s/answer/%s|%s|%s' % (split, dataset, PID, QID), 'w') as f:
+                    for answer in answers:
+                        f.write('%s\n' % answer)
+                with open('data/%s/span/%s|%s|%s' % (split, dataset, PID, QID), 'w') as f:
+                    f.write('%d %d' % (answer_start, answer_end))
 
-                    parsed_count += 1
-                    print('%s set: %d/%d (%.2f%%) \r' \
-                          % (split, parsed_count, doc_count, 100*parsed_count/doc_count), end='')
-            print()
-            print('impossible_questions: %d' % impossible_question)
+            print('%s: %d/%d (%.2f%%) \r' % (dataset, i, passage_count, 100*i/passage_count), end='')
+        print('\nimpossible_questions: %d' % impossible_questions)
     exit(0)
