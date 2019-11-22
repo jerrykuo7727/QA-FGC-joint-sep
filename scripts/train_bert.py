@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 from os.path import join
+from copy import deepcopy
 
 import torch
 from torch.nn.functional import softmax
@@ -135,11 +136,11 @@ if __name__ == '__main__':
                 if val_f1 > best_val:
                     patience = 0
                     best_val = val_f1
-                    best_state_dict = model.state_dict()
+                    best_state_dict = deepcopy(model.state_dict())
                 else:
                     patience += 1
 
-            if patience > 5 or step >= 200000:
+            if patience > 20 or step >= 200000:
                 print('Finish training. Scoring 1-5 best results...')
                 save_path = join(sys.argv[3], 'finetune.ckpt')
                 torch.save(best_state_dict, save_path)

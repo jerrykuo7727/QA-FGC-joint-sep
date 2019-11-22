@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 from os.path import join
+from copy import deepcopy
 
 import torch
 from transformers import BertTokenizer
@@ -129,7 +130,7 @@ if __name__ == '__main__':
                 if val_f1 > best_val:
                     patience = 0
                     best_val = val_f1
-                    best_state_dict = model.state_dict()
+                    best_state_dict = deepcopy(model.state_dict())
                 else:
                     patience += 1
 
