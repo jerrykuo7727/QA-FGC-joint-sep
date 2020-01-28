@@ -68,12 +68,13 @@ class BertDataset(Dataset):
         input_ids = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(input_tokens))
         attention_mask = torch.FloatTensor([1 for _ in input_tokens])
         token_type_ids = torch.LongTensor([0 for _ in question] + [1 for _ in passage])
+        margin_mask = torch.FloatTensor([-1e10, *(-1e10 for _ in question), -1e10, *(0. for _ in passage), -1e-10])
         if self.split == 'train':
             start_positions = torch.LongTensor([answer_start]).squeeze(0)
             end_positions = torch.LongTensor([answer_end]).squeeze(0)
-            return input_ids, attention_mask, token_type_ids, start_positions, end_positions
+            return input_ids, attention_mask, token_type_ids, margin_mask, start_positions, end_positions
         else:
-            return input_ids, attention_mask, token_type_ids, input_tokens_no_unk, answer
+            return input_ids, attention_mask, token_type_ids, margin_mask, input_tokens_no_unk, answer
 
 class XLNetDataset(Dataset):
     def __init__(self, split, tokenizer, bwd=False, prefix=None):
@@ -156,16 +157,18 @@ def get_dataloader(model_type, split, tokenizer, bwd=False, batch_size=1, num_wo
         input_ids = pad_sequence(input_ids, batch_first=True)
         attention_mask = pad_sequence(attention_mask, batch_first=True)
         token_type_ids = pad_sequence(token_type_ids, batch_first=True, padding_value=1)
+        margin_mask = pad_sequence(margin_mask, batch_first=True, padding_value=1e-10)
         start_positions = torch.stack(start_positions)
         end_positions = torch.stack(end_positions)
-        return input_ids, attention_mask, token_type_ids, start_positions, end_positions
+        return input_ids, attention_mask, token_type_ids, margin_mask, start_positions, end_positions
     
     def test_collate_fn(batch):
         input_ids, attention_mask, token_type_ids, input_tokens_no_unk, answers = zip(*batch)
         input_ids = pad_sequence(input_ids, batch_first=True)
         attention_mask = pad_sequence(attention_mask, batch_first=True)
         token_type_ids = pad_sequence(token_type_ids, batch_first=True, padding_value=1)
-        return input_ids, attention_mask, token_type_ids, input_tokens_no_unk, answers,
+        margin_mask = pad_sequence(margin_mask, batch_first=True, padding_value=1e-10)
+        return input_ids, attention_mask, token_type_ids, margin_mask, input_tokens_no_unk, answers
     
     assert model_type in ('bert', 'xlnet')
     shuffle = split == 'train'
