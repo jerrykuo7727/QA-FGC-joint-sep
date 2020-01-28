@@ -73,7 +73,7 @@ class BertDataset(Dataset):
             end_positions = torch.LongTensor([answer_end]).squeeze(0)
             return input_ids, attention_mask, token_type_ids, start_positions, end_positions
         else:
-            margin_mask = torch.FloatTensor([-1e10, *(-1e10 for _ in question), -1e10, *(0. for _ in passage), -1e-10])
+            margin_mask = torch.FloatTensor([*(-1e10 for _ in question), *(0. for _ in passage[:-1]), -1e-10])
             return input_ids, attention_mask, token_type_ids, margin_mask, input_tokens_no_unk, answer
 
 class XLNetDataset(Dataset):

@@ -25,40 +25,52 @@ def validate_dataset(model, split, tokenizer, topk=1):
     
     model.eval()
     for batch in dataloader:
-        input_ids, attention_mask, token_type_ids, input_tokens_no_unk, answers = batch
+        input_ids, attention_mask, token_type_ids, margin_mask, input_tokens_no_unks, answers = batch
         input_ids = input_ids.cuda(device=device)
         attention_mask = attention_mask.cuda(device=device)
         token_type_ids = token_type_ids.cuda(device=device)
+        margin_mask = margin_mask.cuda(device=device)
         with torch.no_grad():
             outputs = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-            
+        
         start_logits, end_logits = outputs[0], outputs[1]
+        start_logits += margin_mask
+        end_logits += margin_mask
+        start_logits = start_logits.cpu()
+        end_logits = end_logits.cpu()
+        
         start_probs = softmax(start_logits, dim=1)
-        end_probs = softmax(end_logits, dim=1)
         start_probs, start_index = start_probs.topk(topk, dim=1)
-        end_probs, end_index = end_probs.topk(topk, dim=1)
         
         for i, answer in enumerate(answers):
-            preds = []
-            if topk <= 1:
-                span_tokens = input_tokens_no_unk[i][start_index[i][0]:end_index[i][0] + 1]
-                preds.append(tokenizer.convert_tokens_to_string(span_tokens))
-            else:
-                joint_probs, joint_index = (start_probs[i].unsqueeze(1) * end_probs[i].unsqueeze(0)).view(topk*topk).topk(topk)
-                for n in range(topk):
-                    smap = joint_index[n] // topk
-                    emap = joint_index[n] - smap * topk
-                    span_tokens = input_tokens_no_unk[i][start_index[i][smap]:end_index[i][emap] + 1]
-                    preds.append(tokenizer.convert_tokens_to_string(span_tokens))
+            preds, probs = [], []
+            for n in range(topk):
+                start_ind = start_index[i][n].item()
+                beam_end_logits = end_logits[i].clone().unsqueeze(0)
+                beam_end_logits[0, :start_ind] += -1e10
+                beam_end_logits[0, start_ind+20:] += -1e10
+
+                end_probs = softmax(beam_end_logits, dim=1)
+                end_probs, end_index = end_probs.topk(1, dim=1)
+                end_ind = end_index[0][0]
+
+                prob = (start_probs[i][n] * end_probs[0][0]).item()
+                span_tokens = input_tokens_no_unks[i][start_ind:end_ind+1]
+                pred = ''.join(tokenizer.convert_tokens_to_string(span_tokens).split())
+                if pred and pred not in preds:
+                    probs.append(prob)
+                    preds.append(pred)
                 
             norm_preds_tokens = [norm_tokenizer.basic_tokenizer.tokenize(pred) for pred in preds]
             norm_preds = [norm_tokenizer.convert_tokens_to_string(norm_pred_tokens) for norm_pred_tokens in norm_preds_tokens]
             norm_answer_tokens = [norm_tokenizer.basic_tokenizer.tokenize(ans) for ans in answer]
             norm_answer = [norm_tokenizer.convert_tokens_to_string(ans_tokens) for ans_tokens in norm_answer_tokens]
-
-            em += max(metric_max_over_ground_truths(exact_match_score, norm_pred, norm_answer) for norm_pred in norm_preds)
-            f1 += max(metric_max_over_ground_truths(f1_score, norm_pred, norm_answer) for norm_pred in norm_preds)
+            
             count += 1
+            if len(preds) > 0:
+                em += max(metric_max_over_ground_truths(exact_match_score, norm_pred, norm_answer) for norm_pred in norm_preds)
+                f1 += max(metric_max_over_ground_truths(f1_score, norm_pred, norm_answer) for norm_pred in norm_preds)
+            
     del dataloader
     return em, f1, count
 
@@ -75,7 +87,7 @@ def validate(model, tokenizer, topk=1):
     
     print('%d-best | val_em=%.5f, val_f1=%.5f | test_em=%.5f, test_f1=%.5f' \
         % (topk, val_avg_em, val_avg_f1, test_avg_em, test_avg_f1))
-    return val_avg_f1
+    return val_avg_em
 
 
 if __name__ == '__main__':
@@ -132,7 +144,7 @@ if __name__ == '__main__':
     
             if step % 3000 == 0:
                 print("step %d | Validating..." % step)
-                val_f1 = validate(model, tokenizer, topk=5)
+                val_f1 = validate(model, tokenizer, topk=1)
                 if val_f1 > best_val:
                     patience = 0
                     best_val = val_f1
@@ -140,7 +152,7 @@ if __name__ == '__main__':
                 else:
                     patience += 1
 
-            if patience > 20 or step >= 200000:
+            if patience >= 10 or step >= 200000:
                 print('Finish training. Scoring 1-5 best results...')
                 save_path = join(sys.argv[3], 'finetune.ckpt')
                 torch.save(best_state_dict, save_path)
