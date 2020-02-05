@@ -40,11 +40,11 @@ def validate_dataset(model, split, tokenizer, topk=1):
         end_logits = end_logits.cpu()
         
         start_probs = softmax(start_logits, dim=1)
-        start_probs, start_index = start_probs.topk(topk, dim=1)
+        start_probs, start_index = start_probs.topk(topk*3, dim=1)
         
         for i, answer in enumerate(answers):
             preds, probs = [], []
-            for n in range(topk):
+            for n in range(topk*3):
                 start_ind = start_index[i][n].item()
                 beam_end_logits = end_logits[i].clone().unsqueeze(0)
                 beam_end_logits[0, :start_ind] += -1e10
@@ -57,9 +57,19 @@ def validate_dataset(model, split, tokenizer, topk=1):
                 prob = (start_probs[i][n] * end_probs[0][0]).item()
                 span_tokens = input_tokens_no_unks[i][start_ind:end_ind+1]
                 pred = ''.join(tokenizer.convert_tokens_to_string(span_tokens).split())
-                if pred and pred not in preds:
+
+                if pred == tokenizer.sep_token:
+                    continue
+                elif pred and pred not in preds:
                     probs.append(prob)
                     preds.append(pred)
+                else:
+                    probs[preds.index(pred)] += prob
+                if len(preds) == topk:
+                    break
+
+            sorted_probs_preds = list(reversed(sorted(zip(probs, preds))))
+            probs, preds = map(list, zip(*sorted_probs_preds))
                 
             norm_preds_tokens = [norm_tokenizer.basic_tokenizer.tokenize(pred) for pred in preds]
             norm_preds = [norm_tokenizer.convert_tokens_to_string(norm_pred_tokens) for norm_pred_tokens in norm_preds_tokens]
