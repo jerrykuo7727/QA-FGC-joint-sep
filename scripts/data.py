@@ -38,16 +38,19 @@ class BertDataset(Dataset):
             span = f.read().split(' ')
             answer_start = int(span[0]) + len(question)
             answer_end = int(span[1]) + len(question)
+        with open('data/%s/SE_idx/%s' % (self.split, question_id)) as f:
+            SE_idx = int(f.read().strip()) + len(question)
         
         # Truncate length to 512
-        diff = len(question) + len(passage) - 511
+        diff = len(question) + len(passage) - 512
         if diff > 0:
             if self.split == 'train':
-                if answer_end > 510:
+                if answer_end > 511:
                     passage = passage[diff:]
                     passage_no_unk = passage_no_unk[diff:]
                     answer_start -= diff
                     answer_end -= diff
+                    SE_idx -= diff
                 else:
                     passage = passage[:-diff]
                     passage_no_unk = passage_no_unk[:-diff]
@@ -60,18 +63,23 @@ class BertDataset(Dataset):
                         passage = passage[:-diff]
                         passage_no_unk = passage_no_unk[:-diff]
 
-        passage.append(self.tokenizer.sep_token)
-        passage_no_unk.append(self.tokenizer.sep_token)
         input_tokens = question + passage
         input_tokens_no_unk = question_no_unk + passage_no_unk
         
         input_ids = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(input_tokens))
         attention_mask = torch.FloatTensor([1 for _ in input_tokens])
-        token_type_ids = torch.LongTensor([0 for _ in question] + [1 for _ in passage])
+        token_type_ids, curr_type = [], 0
+        for token in input_tokens:
+            token_type_ids.append(curr_type)
+            if token == self.tokenizer.sep_token:
+                curr_type = 1 - curr_type  # 0/1 inverse
+        token_type_ids = torch.LongTensor(token_type_ids)
+        
         if self.split == 'train':
             start_positions = torch.LongTensor([answer_start]).squeeze(0)
             end_positions = torch.LongTensor([answer_end]).squeeze(0)
-            return input_ids, attention_mask, token_type_ids, start_positions, end_positions
+            SE_positions = torch.LongTensor([SE_idx]).squeeze(0)
+            return input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions
         else:
             margin_mask = torch.FloatTensor([*(-1e10 for _ in question), *(0. for _ in passage[:-1]), -1e-10])
             return input_ids, attention_mask, token_type_ids, margin_mask, input_tokens_no_unk, answer
@@ -153,13 +161,14 @@ class XLNetDataset(Dataset):
 def get_dataloader(model_type, split, tokenizer, bwd=False, batch_size=1, num_workers=0, prefix=None):
     
     def train_collate_fn(batch):
-        input_ids, attention_mask, token_type_ids, start_positions, end_positions = zip(*batch)
+        input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions = zip(*batch)
         input_ids = pad_sequence(input_ids, batch_first=True)
         attention_mask = pad_sequence(attention_mask, batch_first=True)
         token_type_ids = pad_sequence(token_type_ids, batch_first=True, padding_value=1)
         start_positions = torch.stack(start_positions)
         end_positions = torch.stack(end_positions)
-        return input_ids, attention_mask, token_type_ids, start_positions, end_positions
+        SE_positions = torch.stack(SE_positions)
+        return input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions
     
     def test_collate_fn(batch):
         input_ids, attention_mask, token_type_ids, margin_mask, input_tokens_no_unk, answers = zip(*batch)

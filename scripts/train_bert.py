@@ -5,7 +5,8 @@ from copy import deepcopy
 
 import torch
 from torch.nn.functional import softmax
-from transformers import BertTokenizer, BertForQuestionAnswering
+from transformers import BertTokenizer
+from bertqa_joint import BertQAJoint as BertForQuestionAnswering
 
 from utils import AdamW
 from data import get_dataloader
@@ -56,6 +57,7 @@ def validate_dataset(model, split, tokenizer, topk=1):
 
                 prob = (start_probs[i][n] * end_probs[0][0]).item()
                 span_tokens = input_tokens_no_unks[i][start_ind:end_ind+1]
+                span_tokens = [token for token in span_tokens if token != tokenizer.sep_token]
                 pred = ''.join(tokenizer.convert_tokens_to_string(span_tokens).split())
 
                 if pred == tokenizer.sep_token:
@@ -67,19 +69,22 @@ def validate_dataset(model, split, tokenizer, topk=1):
                     probs[preds.index(pred)] += prob
                 if len(preds) == topk:
                     break
-
-            sorted_probs_preds = list(reversed(sorted(zip(probs, preds))))
-            probs, preds = map(list, zip(*sorted_probs_preds))
-                
-            norm_preds_tokens = [norm_tokenizer.basic_tokenizer.tokenize(pred) for pred in preds]
-            norm_preds = [norm_tokenizer.convert_tokens_to_string(norm_pred_tokens) for norm_pred_tokens in norm_preds_tokens]
-            norm_answer_tokens = [norm_tokenizer.basic_tokenizer.tokenize(ans) for ans in answer]
-            norm_answer = [norm_tokenizer.convert_tokens_to_string(ans_tokens) for ans_tokens in norm_answer_tokens]
             
             count += 1
-            if len(preds) > 0:
-                em += max(metric_max_over_ground_truths(exact_match_score, norm_pred, norm_answer) for norm_pred in norm_preds)
-                f1 += max(metric_max_over_ground_truths(f1_score, norm_pred, norm_answer) for norm_pred in norm_preds)
+            try:
+                if len(preds) > 0:
+                    sorted_probs_preds = list(reversed(sorted(zip(probs, preds))))
+                    probs, preds = map(list, zip(*sorted_probs_preds))
+            
+                    norm_preds_tokens = [norm_tokenizer.basic_tokenizer.tokenize(pred) for pred in preds]
+                    norm_preds = [norm_tokenizer.convert_tokens_to_string(norm_pred_tokens) for norm_pred_tokens in norm_preds_tokens]
+                    norm_answer_tokens = [norm_tokenizer.basic_tokenizer.tokenize(ans) for ans in answer]
+                    norm_answer = [norm_tokenizer.convert_tokens_to_string(ans_tokens) for ans_tokens in norm_answer_tokens]
+            
+                    em += max(metric_max_over_ground_truths(exact_match_score, norm_pred, norm_answer) for norm_pred in norm_preds)
+                    f1 += max(metric_max_over_ground_truths(f1_score, norm_pred, norm_answer) for norm_pred in norm_preds)
+            except:
+                pass
             
     del dataloader
     return em, f1, count
@@ -134,17 +139,21 @@ if __name__ == '__main__':
     print('Start training...')
     while True:
         for batch in dataloader:
-            input_ids, attention_mask, token_type_ids, start_positions, end_positions = batch
+            input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions = batch
 
             input_ids = input_ids.cuda(device=device)
             attention_mask = attention_mask.cuda(device=device)
             token_type_ids = token_type_ids.cuda(device=device)
             start_positions = start_positions.cuda(device=device)
             end_positions = end_positions.cuda(device=device)
-    
+            SE_positions = SE_positions.cuda(device=device)
+
             model.train()
-            loss = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, \
-                               start_positions=start_positions, end_positions=end_positions)[0]
+            span_loss = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, \
+                              start_positions=start_positions, end_positions=end_positions)[0]
+            se_loss = model.predict_se(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, \
+                            SE_positions=SE_positions)[0]
+            loss = span_loss + se_loss
             loss.backward()
             step += 1
             print('step %d | Training...\r' % step, end='')   

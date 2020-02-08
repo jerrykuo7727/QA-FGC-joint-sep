@@ -1,17 +1,17 @@
 #!/bin/bash
 
-python3_cmd=python3
+python3_cmd=python3.6
 
-stage=0
-use_gpu=cuda:0
+stage=2
+use_gpu=cuda:1
 
 model=bert  # (bert|xlnet)
-model_path=/home/M10815022/Models/bert-wwm-ext
-save_path=./models/bert
+model_path=/home/M10815022/Models/roberta-wwm-ext
+save_path=./models/roberta-1.7-joint-sep
 
-train_datasets="DRCD_train DRCD_dev DRCD_test Lee_train Lee_dev Lee_test Kaggle_train Kaggle_dev Kaggle_test ASR_train ASR_dev ASR_test FGC_release_A_train"
-dev_datasets="FGC_release_A_dev"
-test_datasets="FGC_release_A_test"
+train_datasets="DRCD_train DRCD_dev DRCD_test Lee_train Lee_dev Lee_test Kaggle_train Kaggle_dev Kaggle_test ASR_train ASR_dev ASR_test FGC_release_all_train"
+dev_datasets="FGC_release_all_dev"
+test_datasets="FGC_release_all_test"
 
 
 if [ $stage -le 0 ]; then
@@ -33,7 +33,7 @@ if [ $stage -le 1 ]; then
   echo "======================"
   rm -rf data
   for split in train dev test; do
-    for dir in passage passage_no_unk question question_no_unk answer span; do
+    for dir in passage passage_no_unk question question_no_unk answer span SE_idx; do
       mkdir -p data/$split/$dir
     done
   done
