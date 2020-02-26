@@ -7,11 +7,11 @@ use_gpu=cuda:1
 
 model=bert  # (bert|xlnet)
 model_path=/home/M10815022/Models/roberta-wwm-ext
-save_path=./models/roberta-1.7-joint-sep
+save_path=./models/roberta-1.7.2-biloss-woASR
 
-train_datasets="DRCD_train DRCD_dev DRCD_test Lee_train Lee_dev Lee_test Kaggle_train Kaggle_dev Kaggle_test ASR_train ASR_dev ASR_test FGC_release_all_train"
-dev_datasets="FGC_release_all_dev"
-test_datasets="FGC_release_all_test"
+train_datasets="DRCD_train Lee_train Kaggle_train FGC_release_all_train"
+dev_datasets="DRCD_dev Lee_dev Kaggle_dev FGC_release_all_dev"
+test_datasets="DRCD_test Lee_test Kaggle_test FGC_release_all_test"
 
 
 if [ $stage -le 0 ]; then
@@ -33,16 +33,16 @@ if [ $stage -le 1 ]; then
   echo "======================"
   rm -rf data
   for split in train dev test; do
-    for dir in passage passage_no_unk question question_no_unk answer span SE_idx; do
+    for dir in passage passage_no_unk question question_no_unk answer span SE_idx sep_mask shint_mask; do
       mkdir -p data/$split/$dir
     done
   done
-  echo "Preparing train set..."
-  $python3_cmd scripts/prepare_${model}_data.py $model_path train $train_datasets || exit 1
   echo "Preparing dev set..."
   $python3_cmd scripts/prepare_${model}_data.py $model_path dev $dev_datasets || exit 1
   echo "Preparing test set..."
   $python3_cmd scripts/prepare_${model}_data.py $model_path test $test_datasets || exit 1
+  echo "Preparing train set..."
+  $python3_cmd scripts/prepare_${model}_data.py $model_path train $train_datasets || exit 1
 fi
 
 
@@ -54,5 +54,5 @@ if [ $stage -le 2 ]; then
     echo "'$save_path' already exists! Please remove it and try again."; exit 1
   fi
   mkdir -p $save_path
-  $python3_cmd scripts/train_${model}.py $use_gpu $model_path $save_path
+  CUDA_VISIBLE_DEVICES=0,1,3 $python3_cmd scripts/train_${model}.py $use_gpu $model_path $save_path
 fi

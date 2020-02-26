@@ -41,6 +41,11 @@ class BertDataset(Dataset):
         with open('data/%s/SE_idx/%s' % (self.split, question_id)) as f:
             SE_idx = int(f.read().strip()) + len(question)
         
+        with open('data/%s/sep_mask/%s' % (self.split, question_id)) as f:
+            P_sep_mask = [int(s) for s in f.read().split(' ')]
+        with open('data/%s/shint_mask/%s' % (self.split, question_id)) as f:
+            P_shint_mask = [int(s) for s in f.read().split(' ')]
+        
         # Truncate length to 512
         diff = len(question) + len(passage) - 512
         if diff > 0:
@@ -48,23 +53,33 @@ class BertDataset(Dataset):
                 if answer_end > 511:
                     passage = passage[diff:]
                     passage_no_unk = passage_no_unk[diff:]
+                    P_sep_mask = P_sep_mask[diff:]
+                    P_shint_mask = P_shint_mask[diff:]
                     answer_start -= diff
                     answer_end -= diff
                     SE_idx -= diff
                 else:
                     passage = passage[:-diff]
                     passage_no_unk = passage_no_unk[:-diff]
+                    P_sep_mask = P_sep_mask[:-diff]
+                    P_shint_mask = P_shint_mask[:-diff]
             else:
                 if diff > 0:
                     if self.bwd:
                         passage = passage[diff:]
                         passage_no_unk = passage_no_unk[diff:]
+                        P_sep_mask = P_sep_mask[diff:]
+                        P_shint_mask = P_shint_mask[diff:]
                     else:
                         passage = passage[:-diff]
                         passage_no_unk = passage_no_unk[:-diff]
+                        P_sep_mask = P_sep_mask[:-diff]
+                        P_shint_mask = P_shint_mask[:-diff]
 
         input_tokens = question + passage
         input_tokens_no_unk = question_no_unk + passage_no_unk
+        sep_mask = [0 for _ in question] + P_sep_mask
+        shint_mask = [0 for _ in question] + P_shint_mask
         
         input_ids = torch.LongTensor(self.tokenizer.convert_tokens_to_ids(input_tokens))
         attention_mask = torch.FloatTensor([1 for _ in input_tokens])
@@ -79,7 +94,9 @@ class BertDataset(Dataset):
             start_positions = torch.LongTensor([answer_start]).squeeze(0)
             end_positions = torch.LongTensor([answer_end]).squeeze(0)
             SE_positions = torch.LongTensor([SE_idx]).squeeze(0)
-            return input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions
+            sep_mask = torch.BoolTensor(sep_mask)
+            shint_mask = torch.FloatTensor(shint_mask)
+            return input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions, sep_mask, shint_mask
         else:
             margin_mask = torch.FloatTensor([*(-1e10 for _ in question), *(0. for _ in passage[:-1]), -1e-10])
             return input_ids, attention_mask, token_type_ids, margin_mask, input_tokens_no_unk, answer
@@ -161,14 +178,16 @@ class XLNetDataset(Dataset):
 def get_dataloader(model_type, split, tokenizer, bwd=False, batch_size=1, num_workers=0, prefix=None):
     
     def train_collate_fn(batch):
-        input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions = zip(*batch)
+        input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions, sep_mask, shint_mask = zip(*batch)
         input_ids = pad_sequence(input_ids, batch_first=True)
         attention_mask = pad_sequence(attention_mask, batch_first=True)
         token_type_ids = pad_sequence(token_type_ids, batch_first=True, padding_value=1)
         start_positions = torch.stack(start_positions)
         end_positions = torch.stack(end_positions)
         SE_positions = torch.stack(SE_positions)
-        return input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions
+        sep_mask = pad_sequence(sep_mask, batch_first=True)
+        shint_mask = pad_sequence(shint_mask, batch_first=True)
+        return input_ids, attention_mask, token_type_ids, start_positions, end_positions, SE_positions, sep_mask, shint_mask
     
     def test_collate_fn(batch):
         input_ids, attention_mask, token_type_ids, margin_mask, input_tokens_no_unk, answers = zip(*batch)
