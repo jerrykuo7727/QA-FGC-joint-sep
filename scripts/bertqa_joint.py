@@ -96,7 +96,54 @@ class BertQAJoint(BertPreTrainedModel):
             SE_loss_fct = CrossEntropyLoss(ignore_index=SE_ignored_index)
             SE_loss = SE_loss_fct(logits, SE_positions)
 
-            total_loss = start_loss + end_loss + 2 * SE_loss
+            total_loss = start_loss + end_loss + 0.2 * SE_loss
+            outputs = (total_loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+
+    def predict_bceloss(self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None,
+                        start_positions=None, end_positions=None, sep_mask=None, shint_mask=None):
+        ''' Single-span and shint loss. '''
+        outputs = self.bert(input_ids,
+                            attention_mask=attention_mask,
+                            token_type_ids=token_type_ids,
+                            position_ids=position_ids,
+                            head_mask=head_mask)
+        sequence_output = outputs[0]
+
+        qa_logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = qa_logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
+
+        logits = self.se_outputs(sequence_output)
+        logits = logits.squeeze(-1)
+
+        outputs = (start_logits, end_logits, logits, ) + outputs[2:]
+        if start_positions is not None and end_positions is not None and \
+           sep_mask is not None and shint_mask is not None:
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
+
+            # Single-span loss
+            ignored_index = start_logits.size(1)
+            start_positions.clamp_(0, ignored_index)
+            end_positions.clamp_(0, ignored_index)
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
+
+            # Supporting-evidence loss
+            masked_logits = torch.masked_select(logits, sep_mask)
+            masked_targets = torch.masked_select(shint_mask, sep_mask)
+            shint_loss_fct = BCEWithLogitsLoss()
+            shint_loss = shint_loss_fct(masked_logits, masked_targets)
+
+            total_loss = start_loss + end_loss + 0.2 * shint_loss
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions)
@@ -152,7 +199,7 @@ class BertQAJoint(BertPreTrainedModel):
             shint_loss_fct = BCEWithLogitsLoss()
             shint_loss = shint_loss_fct(masked_logits, masked_targets)
 
-            total_loss = start_loss + end_loss + SE_loss + shint_loss
+            total_loss = start_loss + end_loss + 0.1 * SE_loss + 0.1 * shint_loss
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions)

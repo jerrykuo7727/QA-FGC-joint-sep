@@ -206,10 +206,10 @@ if __name__ == '__main__':
             shint_mask = shint_mask.cuda(device=device)
 
             model.train()
-            loss = model.predict_triloss( \
+            loss = model.predict_bceloss( \
                        input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, \
                        start_positions=start_positions, end_positions=end_positions, \
-                       SE_positions=SE_positions, \
+                       #SE_positions=SE_positions, \
                        sep_mask=sep_mask, shint_mask=shint_mask, \
                    )[0]
             loss.backward()
